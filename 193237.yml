@@ -1,0 +1,357 @@
+#CREACION DE PV´s
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-postgresdb-vol1
+spec: #Configuración de lo que va a contruir a nivel de disco
+  storageClassName: leonardo
+  capacity:
+    storage: 10Gi # Capacidad
+  accessModes:
+    - ReadWriteOnce # Lectura y escritura
+  hostPath:
+    path: "/mnt/postdb-vol1" # Lugar donde guardara los datos
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-redisdb-vol1
+spec: #Configuración de lo que va a contruir a nivel de disco
+  storageClassName: leonardo
+  capacity:
+    storage: 10Gi # Capacidad
+  accessModes:
+    - ReadWriteOnce # Lectura y escritura
+  hostPath:
+    path: "/mnt/redisdb-vol1" # Lugar donde guardara los datos
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-mongodb-vol1
+spec: #Configuración de lo que va a contruir a nivel de disco
+  storageClassName: leonardo
+  capacity:
+    storage: 10Gi # Capacidad
+  accessModes:
+    - ReadWriteOnce # Lectura y escritura
+  hostPath:
+    path: "/mnt/mongodb-vol1" # Lugar donde guardara los datos
+
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-mysqldb-vol1
+spec: #Configuración de lo que va a contruir a nivel de disco
+  storageClassName: leonardo
+  capacity:
+    storage: 10Gi # Capacidad
+  accessModes:
+    - ReadWriteOnce # Lectura y escritura
+  hostPath:
+    path: "/mnt/mysqldb-vol1" # Lugar donde guardara los datos
+
+---
+#CREACION DE PVC´s
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-postgres-vol1
+spec:
+  storageClassName: leonardo
+  volumeName: pv-postgresdb-vol1
+  accessModes:
+    - ReadWriteOnce
+  resources: #Configuración de lo que va a reclamar
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-redisdb-vol1
+spec:
+  storageClassName: leonardo
+  volumeName: pv-redisdb-vol1
+  accessModes:
+    - ReadWriteOnce
+  resources: #Configuración de lo que va a reclamar
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-mongodb-vol1
+spec:
+  storageClassName: leonardo
+  volumeName: pv-mongodb-vol1
+  accessModes:
+    - ReadWriteOnce
+  resources: #Configuración de lo que va a reclamar
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-mysqldb-vol1
+spec:
+  storageClassName: leonardo
+  volumeName: pv-mysqldb-vol1
+  accessModes:
+    - ReadWriteOnce
+  resources: #Configuración de lo que va a reclamar
+    requests:
+      storage: 5Gi
+
+---
+
+# CREAR Storage Class
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: leonardo
+provisioner: kubernetes.io/no-provisioner # no-provisioner -> Entorno de de infraestructura local
+reclaimPolicy: Retain # Que realizara con mis datos 
+volumeBindingMode: WaitForFirstConsumer
+
+---
+
+#Crear CONFIG MAP
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: postgres
+data: 
+  postgres_password: "193237"
+  postgres_user: "193237"
+  postgres_db: "postgresdb"
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata: 
+  name: mysql
+data: 
+  mysql_password: "193237"
+
+---
+
+#Crear DEPLOY´s
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment-practica
+  namespace: first-namespace
+  labels:
+    app: postgresdb-server
+spec:
+  selector:
+    matchLabels:
+      app: postgresdb-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgresdb-server
+    spec:
+      containers:
+      - image: postgres:11  #docker pull image
+        name: postgres-db1
+        ports:
+        - containerPort: 5432
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /var/lib/postgresql/data
+          name: pv-postgresdb-vol1
+        env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              configMapKeyRef:
+                name: postgres
+                key: postgres_password
+
+          - name: POSTGRES_USER
+            valueFrom:
+              configMapKeyRef:
+                name: postgres
+                key: postgres_user
+
+          - name: POSTGRES_DB
+            valueFrom:
+              configMapKeyRef:
+                name: postgres
+                key: postgres_db
+      volumes:
+      - name: pv-postgresdb-vol1
+      configMap: 
+        name: postgres
+      persistentVolumeClaim:
+        claimName: pvc-postgres-vol1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-deployment-practica
+  namespace: first-namespace
+  labels:
+    app: mysql-server
+spec:
+  selector:
+    matchLabels:
+      app: mysql-server
+  replicas: 1    
+  template:
+    metadata:
+      labels:
+        app: mysql-server
+    spec:
+      containers:
+      - image: mysql:5.6
+        name: mysql
+        env:
+          # Use secret in real usage
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+              configMapKeyRef:
+                name: mysql
+                key: mysql_password
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: pv-mysqldb-vol1
+          mountPath: /var/lib/mysql
+      volumes:
+      - name: pv-mysqldb-vol1
+      configMap: 
+        name: mysql
+        persistentVolumeClaim:
+          claimName: pvc-mysqldb-vol1
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: redis-deployment-practica
+    namespace: first-namespace
+    labels:
+      app: redis-server
+spec:
+  replicas: 1 
+  selector:
+    matchLabels: 
+      app: redis-server
+  template: 
+    metadata:
+      labels: 
+        app: redis-server
+    spec:
+      containers:
+        - name: redis
+          image: redis
+          ports:        
+            - containerPort: 6379
+          
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-deployment-practica
+  namespace: first-namespace
+  labels:
+    app: mongo-server
+spec:
+  selector:
+    matchLabels:
+      app: mongo-server
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app:  mongo-server  
+    spec:
+      containers:
+      - name: mongo
+        image: mongo:4
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - mountPath: /data/db  
+          name: pv-mongodb-vol1
+      volumes:
+      - name: pv-mongodb-vol1
+        persistentVolumeClaim:
+          claimName: pvc-mongodb-vol1  
+
+---
+
+#CREACION DEL SERVICIO
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgresdb-service
+spec:
+  selector:
+    app: postgresdb-server
+  ports:
+    - port: 5300
+      targetPort: 5432
+  type: LoadBalancer
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+spec:
+  selector:
+    app: mysql-server
+  ports:
+    - port: 5303
+      targetPort: 3306
+  type: LoadBalancer
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: redis-server
+  ports:
+  - port: 5301
+    targetPort: 6379
+    protocol: TCP
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: mongo-server
+  ports:
+  - port: 5302
+    targetPort: 27017
+    protocol: TCP
